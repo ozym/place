@@ -40,5 +40,6 @@ func (e *Device) SetLocation(lat, lon, alt uint32) {
 }
 
 func (e *Device) String() string {
-	return fmt.Sprintf("\"host=%s\": ip=%s place=\"%s\" code=\"%s\" model=\"%s\": lat=%g lon=%g height=%g", e.Name, e.IP, e.Place, e.Code, e.Model, e.Latitude, e.Longitude, e.Height)
+	return fmt.Sprintf("Host: %s, IP: %s, Place: \"%s\", Model: \"%s\", Code: %s, Latitude: %g, Longitude: %g, Height: %g",
+                e.Name, e.IP, e.Place, e.Code, e.Model, e.Latitude, e.Longitude, e.Height)
 }
