@@ -2,6 +2,7 @@ package zone
 
 import (
 	"fmt"
+	"github.com/miekg/dns"
 	"net"
 )
 
@@ -23,23 +24,31 @@ type Device struct {
 	Height    float64
 }
 
-func (e *Device) SetLocation(lat, lon, alt uint32) {
+func (d *Device) SetLocation(lat, lon, alt uint32) {
 	if lat > LOC_EQUATOR {
-		e.Latitude = (float64)(lat-LOC_EQUATOR) / LOC_DEGREES
+		d.Latitude = (float64)(lat-LOC_EQUATOR) / LOC_DEGREES
 	} else {
-		e.Latitude = (float64)(LOC_EQUATOR-lat) / -LOC_DEGREES
+		d.Latitude = (float64)(LOC_EQUATOR-lat) / -LOC_DEGREES
 	}
 
 	if lon > LOC_PRIMEMERIDIAN {
-		e.Longitude = (float64)(lon-LOC_PRIMEMERIDIAN) / LOC_DEGREES
+		d.Longitude = (float64)(lon-LOC_PRIMEMERIDIAN) / LOC_DEGREES
 	} else {
-		e.Longitude = (float64)(LOC_PRIMEMERIDIAN-lon) / -LOC_DEGREES
+		d.Longitude = (float64)(LOC_PRIMEMERIDIAN-lon) / -LOC_DEGREES
 	}
 
-	e.Height = float64(alt)/100.0 - LOC_ALTITUDEBASE
+	d.Height = float64(alt)/100.0 - LOC_ALTITUDEBASE
 }
 
-func (e *Device) String() string {
+func (d *Device) Hostname() string {
+	l := dns.SplitDomainName(d.Name)
+	if len(l) > 0 {
+		return l[0]
+	}
+	return ""
+}
+
+func (d *Device) String() string {
 	return fmt.Sprintf("Host: %s, IP: %s, Place: \"%s\", Model: \"%s\", Code: %s, Latitude: %g, Longitude: %g, Height: %g",
-                e.Name, e.IP, e.Place, e.Model, e.Code, e.Latitude, e.Longitude, e.Height)
+		d.Name, d.IP, d.Place, d.Model, d.Code, d.Latitude, d.Longitude, d.Height)
 }
