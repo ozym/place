@@ -45,7 +45,7 @@ func (d *Device) Hostname() string {
 	if len(l) > 0 {
 		return l[0]
 	}
-	return ""
+	return d.Name
 }
 
 func (d *Device) String() string {
