@@ -9,34 +9,34 @@ import (
 	"strings"
 )
 
-const (
-	DEF_SERVICE_PORT = "53"
-)
-
 type Service struct {
 	Zone   string
 	Server string
-	Port   string
 }
 
-func (s *Service) ServerPort() (string, error) {
-	h, err := net.LookupHost(s.Server)
+func ServerPort(server, port string) (string, error) {
+
+	s := server
+	p := port
+
+	tmp := strings.Split(server, ":")
+	if len(tmp) > 1 {
+		s, p = tmp[0], tmp[1]
+	}
+
+	h, err := net.LookupHost(s)
 	if err != nil {
 		return "", err
 	}
 
-	if s.Port != "" {
-		return net.JoinHostPort(h[0], s.Port), nil
-	}
-
-	return net.JoinHostPort(h[0], DEF_SERVICE_PORT), nil
+	return net.JoinHostPort(h[0], p), nil
 }
 
 func (s *Service) Transfer() ([]dns.RR, error) {
 	m := new(dns.Msg)
 	m.SetAxfr(s.Zone)
 
-	h, err := s.ServerPort()
+	h, err := ServerPort(s.Server, "53")
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +63,7 @@ func (s *Service) Lookup(name string, record uint16) ([]dns.RR, error) {
 	m.SetQuestion(dns.Fqdn(name), record)
 	m.RecursionDesired = true
 
-	h, err := s.ServerPort()
+	h, err := ServerPort(s.Server, "53")
 	if err != nil {
 		return nil, err
 	}

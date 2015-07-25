@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/miekg/dns"
 	"net"
+	"strings"
 )
 
 const (
@@ -14,14 +15,14 @@ const (
 )
 
 type Device struct {
-	Name      string
-	IP        net.IP
-	Place     string
-	Code      string
-	Model     string
-	Latitude  float64
-	Longitude float64
-	Height    float64
+	Name      string  `json:"name"`
+	IP        net.IP  `json:"ip"`
+	Place     string  `json:"place"`
+	Code      string  `json:"code"`
+	Model     string  `json:"model"`
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	Height    float64 `json:"height"`
 }
 
 func (d *Device) SetLocation(lat, lon, alt uint32) {
@@ -46,6 +47,25 @@ func (d *Device) Hostname() string {
 		return l[0]
 	}
 	return d.Name
+}
+
+func (d *Device) HasName(name string) bool {
+	return strings.EqualFold(d.Name, name)
+}
+func (d *Device) HasAddress(ip net.IP) bool {
+	return d.IP.Equal(ip)
+}
+func (d *Device) InNetwork(network net.IPNet) bool {
+	return network.Contains(d.IP)
+}
+func (d *Device) AtPlace(place string) bool {
+	return strings.EqualFold(d.Place, place)
+}
+func (d *Device) HasCode(code string) bool {
+	return strings.EqualFold(d.Code, code)
+}
+func (d *Device) HasModel(model string) bool {
+	return d.Model == model
 }
 
 func (d *Device) String() string {
