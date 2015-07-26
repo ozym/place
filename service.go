@@ -7,6 +7,7 @@ import (
 	"net"
 	"sort"
 	"strings"
+	"time"
 )
 
 type Service struct {
@@ -16,12 +17,14 @@ type Service struct {
 
 func ServerPort(server, port string) (string, error) {
 
-	s := server
-	p := port
+	sp := server
+	if strings.IndexByte(server, ':') < 0 {
+		sp = server + ":" + port
+	}
 
-	tmp := strings.Split(server, ":")
-	if len(tmp) > 1 {
-		s, p = tmp[0], tmp[1]
+	s, p, err := net.SplitHostPort(sp)
+	if err != nil {
+		return "", err
 	}
 
 	h, err := net.LookupHost(s)
@@ -32,11 +35,15 @@ func ServerPort(server, port string) (string, error) {
 	return net.JoinHostPort(h[0], p), nil
 }
 
+func (s *Service) ServerPort() (string, error) {
+	return ServerPort(s.Server, "53")
+}
+
 func (s *Service) Transfer() ([]dns.RR, error) {
 	m := new(dns.Msg)
 	m.SetAxfr(s.Zone)
 
-	h, err := ServerPort(s.Server, "53")
+	h, err := s.ServerPort()
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +70,7 @@ func (s *Service) Lookup(name string, record uint16) ([]dns.RR, error) {
 	m.SetQuestion(dns.Fqdn(name), record)
 	m.RecursionDesired = true
 
-	h, err := ServerPort(s.Server, "53")
+	h, err := s.ServerPort()
 	if err != nil {
 		return nil, err
 	}
@@ -81,6 +88,12 @@ func (s *Service) Lookup(name string, record uint16) ([]dns.RR, error) {
 	return r.Answer, nil
 }
 
+func copyIP(ip net.IP) net.IP {
+	p := make(net.IP, len(ip))
+	copy(p, ip)
+	return p
+}
+
 func (s *Service) Decode(records []dns.RR) *Device {
 	d := Device{}
 
@@ -88,7 +101,7 @@ func (s *Service) Decode(records []dns.RR) *Device {
 		d.Name = r.Header().Name
 		switch x := r.(type) {
 		case *dns.A:
-			d.IP = x.A
+			d.IP = copyIP(x.A)
 		case *dns.CNAME:
 		case *dns.TXT:
 			d.Place = strings.Join(x.Txt, " ")
@@ -197,4 +210,167 @@ func (s *Service) List() ([]*Device, error) {
 	}
 
 	return res, nil
+}
+
+// see RFC1876 - A Means for Expressing Location Information in the Domain Name System
+func cm2size(cms uint32) uint8 {
+	var e, v uint32
+
+	for v = cms; v >= 10; v = v / 10 {
+		e = e + 1
+	}
+
+	return (uint8(v) << 4) | uint8(e&0x0f)
+}
+
+// build an OPT RR to allow larger buffer sizes
+func (d *Device) ToOPT() *dns.OPT {
+
+	rr := &dns.OPT{
+		Hdr: dns.RR_Header{Name: ".", Rrtype: dns.TypeOPT, Class: dns.ClassINET, Ttl: 0},
+	}
+
+	return rr
+}
+
+// build a model/code DNS RR
+func (d *Device) ToHINFO() *dns.HINFO {
+
+	rr := &dns.HINFO{
+		Hdr: dns.RR_Header{Name: dns.Fqdn(d.Name), Rrtype: dns.TypeHINFO, Class: dns.ClassINET, Ttl: 0},
+		Os:  d.Code,
+		Cpu: d.Model,
+	}
+
+	return rr
+}
+
+// build a location DNS RR (use default size etc.)
+func (d *Device) ToLOC() *dns.LOC {
+	la, lo, a := d.Location()
+
+	rr := &dns.LOC{
+		Hdr:       dns.RR_Header{Name: dns.Fqdn(d.Name), Rrtype: dns.TypeLOC, Class: dns.ClassINET, Ttl: 0},
+		Size:      cm2size(10000),
+		HorizPre:  cm2size(5000),
+		VertPre:   cm2size(5000),
+		Latitude:  la,
+		Longitude: lo,
+		Altitude:  a,
+	}
+
+	return rr
+}
+
+// build a place name DNS RR
+func (d *Device) ToTXT() *dns.TXT {
+
+	rr := &dns.TXT{
+		Hdr: dns.RR_Header{Name: dns.Fqdn(d.Name), Rrtype: dns.TypeTXT, Class: dns.ClassINET, Ttl: 0},
+		Txt: strings.Split(d.Place, " "),
+	}
+
+	return rr
+}
+
+// dynamically update the device info stored in DNS
+func (s *Service) UpdateInfo(key, secret string, device *Device) error {
+	m := new(dns.Msg)
+
+	rr := []dns.RR{
+		device.ToOPT(),
+		device.ToTXT(),
+		device.ToHINFO(),
+		device.ToLOC(),
+	}
+
+	m.SetUpdate(s.Zone)
+	m.SetTsig(dns.Fqdn(key), dns.HmacMD5, 300, time.Now().Unix())
+	m.Insert(rr)
+
+	h, err := s.ServerPort()
+	if err != nil {
+		return err
+	}
+
+	c := new(dns.Client)
+	c.TsigSecret = map[string]string{dns.Fqdn(key): secret}
+
+	r, _, err := c.Exchange(m, h)
+	if err != nil {
+		return err
+	}
+
+	if r.Rcode != dns.RcodeSuccess {
+		return errors.New(fmt.Sprintf("invalid update answer for %s", device.Name))
+	}
+
+	return nil
+}
+
+// dynamically remove the device info stored in DNS (usually prior to an update)
+func (s *Service) RemoveInfo(key, secret string, device *Device) error {
+	m := new(dns.Msg)
+
+	rr := []dns.RR{
+		device.ToOPT(),
+		device.ToTXT(),
+		device.ToHINFO(),
+		device.ToLOC(),
+	}
+
+	m.SetUpdate(s.Zone)
+	m.SetTsig(dns.Fqdn(key), dns.HmacMD5, 300, time.Now().Unix())
+	m.RemoveRRset(rr)
+
+	h, err := s.ServerPort()
+	if err != nil {
+		return err
+	}
+
+	c := new(dns.Client)
+	c.TsigSecret = map[string]string{dns.Fqdn(key): secret}
+
+	r, _, err := c.Exchange(m, h)
+	if err != nil {
+		return err
+	}
+
+	if r.Rcode != dns.RcodeSuccess {
+		return errors.New(fmt.Sprintf("invalid update answer for %s", device.Name))
+	}
+
+	return nil
+}
+
+// remove all RR values stored in DNS
+func (s *Service) RemoveAll(key, secret string, device *Device) error {
+
+	rr := &dns.ANY{
+		Hdr: dns.RR_Header{Name: dns.Fqdn(device.Name), Rrtype: dns.TypeANY, Class: dns.ClassANY, Ttl: 0},
+	}
+
+	m := new(dns.Msg)
+	m.SetUpdate(s.Zone)
+	m.SetTsig(dns.Fqdn(key), dns.HmacMD5, 300, time.Now().Unix())
+	m.RemoveName([]dns.RR{rr})
+
+	h, err := s.ServerPort()
+	if err != nil {
+		return err
+	}
+
+	c := new(dns.Client)
+	c.TsigSecret = map[string]string{dns.Fqdn(key): secret}
+
+	r, _, err := c.Exchange(m, h)
+	if err != nil {
+		return err
+	}
+
+	if r.Rcode != dns.RcodeSuccess {
+		return errors.New(fmt.Sprintf("invalid update answer for %s", device.Name))
+	}
+
+	return nil
 }

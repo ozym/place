@@ -41,6 +41,15 @@ func (d *Device) SetLocation(lat, lon, alt uint32) {
 	d.Height = float64(alt)/100.0 - LOC_ALTITUDEBASE
 }
 
+func (d *Device) Location() (uint32, uint32, uint32) {
+
+	lat := uint32((d.Latitude * LOC_DEGREES) + LOC_EQUATOR)
+	lon := uint32((d.Longitude * LOC_DEGREES) + LOC_PRIMEMERIDIAN)
+	alt := uint32((d.Height + LOC_ALTITUDEBASE) * 100.0)
+
+	return lat, lon, alt
+}
+
 func (d *Device) Hostname() string {
 	l := dns.SplitDomainName(d.Name)
 	if len(l) > 0 {
@@ -61,11 +70,43 @@ func (d *Device) InNetwork(network net.IPNet) bool {
 func (d *Device) AtPlace(place string) bool {
 	return strings.EqualFold(d.Place, place)
 }
+func (d *Device) AtLocation(lat, lon, alt uint32) bool {
+	la, lo, a := d.Location()
+	if la != lat {
+		return false
+	}
+	if lo != lon {
+		return false
+	}
+	if a != alt {
+		return false
+	}
+	return true
+}
 func (d *Device) HasCode(code string) bool {
 	return strings.EqualFold(d.Code, code)
 }
 func (d *Device) HasModel(model string) bool {
 	return d.Model == model
+}
+
+func (d *Device) Equal(device *Device) bool {
+	if !d.HasName(device.Name) {
+		return false
+	}
+	if !d.HasAddress(device.IP) {
+		return false
+	}
+	if !d.HasCode(device.Code) {
+		return false
+	}
+	if !d.HasModel(device.Model) {
+		return false
+	}
+	if !d.AtLocation(device.Location()) {
+		return false
+	}
+	return true
 }
 
 func (d *Device) String() string {
