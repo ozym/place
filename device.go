@@ -1,7 +1,7 @@
 package zone
 
 import (
-	"fmt"
+	"encoding/json"
 	"github.com/miekg/dns"
 	"net"
 	"strings"
@@ -15,14 +15,16 @@ const (
 )
 
 type Device struct {
-	Name      string  `json:"name"`
-	IP        net.IP  `json:"ip"`
-	Place     string  `json:"place"`
-	Code      string  `json:"code"`
-	Model     string  `json:"model"`
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
-	Height    float64 `json:"height"`
+	Name      string   `json:"name"`
+	IP        net.IP   `json:"ip"`
+	Addr      []net.IP `json:"addr"`
+	Labels    []string `json:"labels"`
+	Place     string   `json:"place"`
+	Code      string   `json:"code"`
+	Model     string   `json:"model"`
+	Latitude  float64  `json:"latitude"`
+	Longitude float64  `json:"longitude"`
+	Height    float64  `json:"height"`
 }
 
 func (d *Device) SetLocation(lat, lon, alt uint32) {
@@ -62,10 +64,28 @@ func (d *Device) HasName(name string) bool {
 	return strings.EqualFold(d.Name, name)
 }
 func (d *Device) HasAddress(ip net.IP) bool {
-	return d.IP.Equal(ip)
+	if d.IP.Equal(ip) {
+		return true
+	}
+	for _, a := range d.Addr {
+		if !a.Equal(ip) {
+			continue
+		}
+		return true
+	}
+	return false
 }
 func (d *Device) InNetwork(network net.IPNet) bool {
-	return network.Contains(d.IP)
+	if network.Contains(d.IP) {
+		return true
+	}
+	for _, a := range d.Addr {
+		if !network.Contains(a) {
+			continue
+		}
+		return true
+	}
+	return false
 }
 func (d *Device) AtPlace(place string) bool {
 	return strings.EqualFold(d.Place, place)
@@ -110,6 +130,9 @@ func (d *Device) Equal(device *Device) bool {
 }
 
 func (d *Device) String() string {
-	return fmt.Sprintf("Host: %s, IP: %s, Place: \"%s\", Model: \"%s\", Code: %s, Latitude: %g, Longitude: %g, Height: %g",
-		d.Name, d.IP, d.Place, d.Model, d.Code, d.Latitude, d.Longitude, d.Height)
+	m, err := json.Marshal(d)
+	if err != nil {
+		return ""
+	}
+	return (string)(m)
 }

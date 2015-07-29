@@ -11,7 +11,6 @@ import (
 )
 
 type Service struct {
-	Zone   string
 	Server string
 }
 
@@ -39,9 +38,9 @@ func (s *Service) ServerPort() (string, error) {
 	return ServerPort(s.Server, "53")
 }
 
-func (s *Service) Transfer() ([]dns.RR, error) {
+func (s *Service) Transfer(zone string) ([]dns.RR, error) {
 	m := new(dns.Msg)
-	m.SetAxfr(s.Zone)
+	m.SetAxfr(zone)
 
 	h, err := s.ServerPort()
 	if err != nil {
@@ -158,41 +157,72 @@ func (s *Service) FindByIP(ip net.IP) (*Device, error) {
 	return s.Find(h[0])
 }
 
-func (s *Service) List() ([]*Device, error) {
+func (s *Service) List(zones []string) ([]*Device, error) {
 
-	rr, err := s.Transfer()
-	if err != nil {
-		return nil, err
-	}
-
+	ptrs := make(map[string][]net.IP)
+	cnames := make(map[string][]string)
 	devices := make(map[string]Device)
 
-	// only collect A record details ...
-	for _, r := range rr {
-		switch x := r.(type) {
-		case *dns.A:
-			devices[r.Header().Name] = Device{Name: r.Header().Name, IP: x.A}
+	for _, z := range zones {
+		rr, err := s.Transfer(z)
+		if err != nil {
+			return nil, err
+		}
+
+		// only collect A & PTR record details ...
+		for _, r := range rr {
+			switch x := r.(type) {
+			case *dns.A:
+				devices[r.Header().Name] = Device{Name: r.Header().Name, IP: x.A}
+			case *dns.PTR:
+				s := strings.Split(strings.Replace(x.Header().Name, z, "", -1)+strings.Replace(z, ".in-addr.arpa.", "", -1), ".")
+				for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
+					s[i], s[j] = s[j], s[i]
+				}
+				ptrs[x.Ptr] = append(ptrs[x.Ptr], net.ParseIP(strings.Join(s, ".")))
+			case *dns.CNAME:
+				cnames[x.Target] = append(cnames[x.Target], r.Header().Name)
+			}
+		}
+
+		// gather other device details ...
+		for _, r := range rr {
+			d, ok := devices[r.Header().Name]
+			if !ok {
+				continue
+			}
+			switch x := r.(type) {
+			case *dns.A:
+			case *dns.PTR:
+			case *dns.CNAME:
+			case *dns.TXT:
+				d.Place = strings.Join(x.Txt, " ")
+			case *dns.HINFO:
+				d.Code = x.Os
+				d.Model = x.Cpu
+			case *dns.LOC:
+				d.SetLocation(x.Latitude, x.Longitude, x.Altitude)
+			}
+			devices[r.Header().Name] = d
 		}
 	}
 
-	// gather other device details ...
-	for _, r := range rr {
-		d, ok := devices[r.Header().Name]
+	for k, _ := range ptrs {
+		d, ok := devices[k]
 		if !ok {
 			continue
 		}
-		switch x := r.(type) {
-		case *dns.A:
-		case *dns.CNAME:
-		case *dns.TXT:
-			d.Place = strings.Join(x.Txt, " ")
-		case *dns.HINFO:
-			d.Code = x.Os
-			d.Model = x.Cpu
-		case *dns.LOC:
-			d.SetLocation(x.Latitude, x.Longitude, x.Altitude)
+		d.Addr = append(d.Addr, ptrs[k]...)
+		devices[k] = d
+	}
+
+	for k, _ := range cnames {
+		d, ok := devices[k]
+		if !ok {
+			continue
 		}
-		devices[r.Header().Name] = d
+		d.Labels = append(d.Labels, cnames[k]...)
+		devices[k] = d
 	}
 
 	// sort by device name
@@ -274,7 +304,7 @@ func (d *Device) ToTXT() *dns.TXT {
 }
 
 // dynamically update the device info stored in DNS
-func (s *Service) UpdateInfo(key, secret string, device *Device) error {
+func (s *Service) UpdateInfo(zone, key, secret string, device *Device) error {
 	m := new(dns.Msg)
 
 	rr := []dns.RR{
@@ -284,7 +314,7 @@ func (s *Service) UpdateInfo(key, secret string, device *Device) error {
 		device.ToLOC(),
 	}
 
-	m.SetUpdate(s.Zone)
+	m.SetUpdate(zone)
 	m.SetTsig(dns.Fqdn(key), dns.HmacMD5, 300, time.Now().Unix())
 	m.Insert(rr)
 
@@ -309,7 +339,7 @@ func (s *Service) UpdateInfo(key, secret string, device *Device) error {
 }
 
 // dynamically remove the device info stored in DNS (usually prior to an update)
-func (s *Service) RemoveInfo(key, secret string, device *Device) error {
+func (s *Service) RemoveInfo(zone, key, secret string, device *Device) error {
 	m := new(dns.Msg)
 
 	rr := []dns.RR{
@@ -319,7 +349,7 @@ func (s *Service) RemoveInfo(key, secret string, device *Device) error {
 		device.ToLOC(),
 	}
 
-	m.SetUpdate(s.Zone)
+	m.SetUpdate(zone)
 	m.SetTsig(dns.Fqdn(key), dns.HmacMD5, 300, time.Now().Unix())
 	m.RemoveRRset(rr)
 
@@ -344,14 +374,14 @@ func (s *Service) RemoveInfo(key, secret string, device *Device) error {
 }
 
 // remove all RR values stored in DNS
-func (s *Service) RemoveAll(key, secret string, device *Device) error {
+func (s *Service) RemoveAll(zone, key, secret string, device *Device) error {
 
 	rr := &dns.ANY{
 		Hdr: dns.RR_Header{Name: dns.Fqdn(device.Name), Rrtype: dns.TypeANY, Class: dns.ClassANY, Ttl: 0},
 	}
 
 	m := new(dns.Msg)
-	m.SetUpdate(s.Zone)
+	m.SetUpdate(zone)
 	m.SetTsig(dns.Fqdn(key), dns.HmacMD5, 300, time.Now().Unix())
 	m.RemoveName([]dns.RR{rr})
 

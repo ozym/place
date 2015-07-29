@@ -13,10 +13,10 @@ type Devices struct {
 	List []*Device
 }
 
-func LoadLocal(zone, server string) (*Devices, error) {
-	s := Service{Zone: zone, Server: server}
+func LoadLocal(server string, zones []string) (*Devices, error) {
+	s := Service{Server: server}
 
-	l, err := s.List()
+	l, err := s.List(zones)
 	if err != nil {
 		return nil, err
 	}
