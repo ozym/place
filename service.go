@@ -157,29 +157,44 @@ func (s *Service) FindByIP(ip net.IP) (*Device, error) {
 	return s.Find(h[0])
 }
 
-func (s *Service) List(zones []string) ([]*Device, error) {
+func (s *Service) List(zones, reverse []string) ([]*Device, error) {
+
+	devices := make(map[string]Device)
 
 	ptrs := make(map[string][]net.IP)
 	cnames := make(map[string][]string)
-	devices := make(map[string]Device)
+
+	for _, z := range reverse {
+		rr, err := s.Transfer(z)
+		if err != nil {
+			return nil, err
+		}
+		// only collect PTR record details ...
+		for _, r := range rr {
+			switch x := r.(type) {
+			case *dns.PTR:
+				s := strings.Split(strings.Replace(x.Header().Name, z, "", -1)+
+					strings.Replace(z, ".in-addr.arpa.", "", -1), ".")
+				for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
+					s[i], s[j] = s[j], s[i]
+				}
+				ptrs[x.Ptr] = append(ptrs[x.Ptr], net.ParseIP(strings.Join(s, ".")))
+			}
+		}
+	}
 
 	for _, z := range zones {
+
 		rr, err := s.Transfer(z)
 		if err != nil {
 			return nil, err
 		}
 
-		// only collect A & PTR record details ...
+		// collect A & CNAME record first ...
 		for _, r := range rr {
 			switch x := r.(type) {
 			case *dns.A:
 				devices[r.Header().Name] = Device{Name: r.Header().Name, IP: x.A}
-			case *dns.PTR:
-				s := strings.Split(strings.Replace(x.Header().Name, z, "", -1)+strings.Replace(z, ".in-addr.arpa.", "", -1), ".")
-				for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
-					s[i], s[j] = s[j], s[i]
-				}
-				ptrs[x.Ptr] = append(ptrs[x.Ptr], net.ParseIP(strings.Join(s, ".")))
 			case *dns.CNAME:
 				cnames[x.Target] = append(cnames[x.Target], r.Header().Name)
 			}
@@ -198,8 +213,8 @@ func (s *Service) List(zones []string) ([]*Device, error) {
 			case *dns.TXT:
 				d.Place = strings.Join(x.Txt, " ")
 			case *dns.HINFO:
-				d.Code = x.Os
 				d.Model = x.Cpu
+				d.Code = x.Os
 			case *dns.LOC:
 				d.SetLocation(x.Latitude, x.Longitude, x.Altitude)
 			}
@@ -212,7 +227,7 @@ func (s *Service) List(zones []string) ([]*Device, error) {
 		if !ok {
 			continue
 		}
-		d.Addr = append(d.Addr, ptrs[k]...)
+		d.Reverse = append(d.Reverse, ptrs[k]...)
 		devices[k] = d
 	}
 
@@ -221,7 +236,7 @@ func (s *Service) List(zones []string) ([]*Device, error) {
 		if !ok {
 			continue
 		}
-		d.Labels = append(d.Labels, cnames[k]...)
+		d.Aliases = append(d.Aliases, cnames[k]...)
 		devices[k] = d
 	}
 

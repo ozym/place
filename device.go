@@ -17,11 +17,11 @@ const (
 type Device struct {
 	Name      string   `json:"name"`
 	IP        net.IP   `json:"ip"`
-	Addr      []net.IP `json:"addr"`
-	Labels    []string `json:"labels"`
+	Reverse   []net.IP `json:"reverse"`
+	Aliases   []string `json:"aliases"`
 	Place     string   `json:"place"`
-	Code      string   `json:"code"`
 	Model     string   `json:"model"`
+	Code      string   `json:"code"`
 	Latitude  float64  `json:"latitude"`
 	Longitude float64  `json:"longitude"`
 	Height    float64  `json:"height"`
@@ -67,7 +67,7 @@ func (d *Device) HasAddress(ip net.IP) bool {
 	if d.IP.Equal(ip) {
 		return true
 	}
-	for _, a := range d.Addr {
+	for _, a := range d.Reverse {
 		if !a.Equal(ip) {
 			continue
 		}
@@ -79,7 +79,7 @@ func (d *Device) InNetwork(network net.IPNet) bool {
 	if network.Contains(d.IP) {
 		return true
 	}
-	for _, a := range d.Addr {
+	for _, a := range d.Reverse {
 		if !network.Contains(a) {
 			continue
 		}
