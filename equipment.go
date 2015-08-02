@@ -334,3 +334,26 @@ func (e *Equipment) MatchByModelAndCode(model, code string) ([]Device, error) {
 
 	return res, nil
 }
+
+func (e *Equipment) MatchByPlace(place string) ([]Device, error) {
+
+	re, err := regexp.Compile(place)
+	if err != nil {
+		return nil, err
+	}
+
+	devices, err := e.List()
+	if err != nil {
+		return nil, err
+	}
+	res := make([]Device, 0, len(devices))
+	for _, d := range devices {
+		if !re.MatchString(d.Place) {
+			continue
+		}
+
+		res = append(res, d)
+	}
+
+	return res, nil
+}

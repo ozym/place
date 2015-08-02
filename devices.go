@@ -182,3 +182,21 @@ func (d *Devices) MatchByModel(model string) ([]*Device, error) {
 
 	return l, nil
 }
+
+func (d *Devices) MatchByPlace(place string) ([]*Device, error) {
+	var l []*Device
+
+	re, err := regexp.Compile(place)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, s := range d.List {
+		if !re.MatchString(s.Place) {
+			continue
+		}
+		l = append(l, s)
+	}
+
+	return l, nil
+}
