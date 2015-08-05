@@ -14,17 +14,30 @@ const (
 	LOC_ALTITUDEBASE  = 100000.0
 )
 
+// Device describes the DNS stored equipment information.
+// It is assumed that each piece of equipment has a single A record pointing
+// to a definitive DNS Name and Address. Possible equipment Aliases
+// can also be stored via CNAME lookups, likewise Mapping IP addresses can be
+// stored via PTR records pointing to CNAME entries. Also stored are Place,
+// Model details, instrument or site Codes and Place location information.
 type Device struct {
-	Name      string   `json:"name"`
-	IP        net.IP   `json:"ip"`
-	Reverse   []net.IP `json:"reverse"`
-	Aliases   []string `json:"aliases"`
-	Place     string   `json:"place"`
-	Model     string   `json:"model"`
-	Code      string   `json:"code"`
-	Latitude  float64  `json:"latitude"`
-	Longitude float64  `json:"longitude"`
-	Height    float64  `json:"height"`
+	Name      string            `json:"name"`      // full dns name
+	IP        net.IP            `json:"ip"`        // primary ip address (A)
+	Reverse   []net.IP          `json:"reverse"`   // primary lookups (PTR)
+	Mapping   map[string]net.IP `json:"mapping"`   // secondary lookups (PTR/CNAME)
+	Aliases   []string          `json:"aliases"`   // other names (CNAME)
+	Place     string            `json:"place"`     // full place name (TXT)
+	Model     string            `json:"model"`     // equipment model (HINFO)
+	Code      string            `json:"code"`      // equipment site code (HINFO)
+	Latitude  float64           `json:"latitude"`  // place latitude (LOC)
+	Longitude float64           `json:"longitude"` // place longitude (LOC)
+	Height    float64           `json:"height"`    // place height (LOC)
+}
+
+func CopyIP(ip net.IP) net.IP {
+	p := make(net.IP, len(ip))
+	copy(p, ip)
+	return p
 }
 
 func (d *Device) SetLocation(lat, lon, alt uint32) {
@@ -127,6 +140,45 @@ func (d *Device) Equal(device *Device) bool {
 		return false
 	}
 	return true
+}
+
+func (d *Device) HasAlias(alias string) bool {
+	for _, a := range d.Aliases {
+		if a != alias {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+func (d *Device) HasReverse(ip net.IP) bool {
+	for _, a := range d.Reverse {
+		if !a.Equal(ip) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+func (d *Device) HasIP(ip net.IP) bool {
+	for _, a := range d.Mapping {
+		if !a.Equal(ip) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+func (d *Device) HasMapping(name string, ip net.IP) bool {
+	for n, i := range d.Mapping {
+		if n == name && i.Equal(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *Device) String() string {

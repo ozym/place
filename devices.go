@@ -14,7 +14,10 @@ type Devices struct {
 }
 
 func LoadLocal(server string, zones, reverse []string) (*Devices, error) {
-	s := Service{Server: server}
+	s := Service{
+		Server: server,
+		Port:   "53",
+	}
 
 	l, err := s.List(zones, reverse)
 	if err != nil {
@@ -28,7 +31,12 @@ func LoadLocal(server string, zones, reverse []string) (*Devices, error) {
 
 func LoadRemote(server string) (*Devices, error) {
 
-	host, err := ServerPort(server, "9001")
+	s := Service{
+		Server: server,
+		Port:   "9001",
+	}
+
+	host, err := s.ServerPort()
 	if err != nil {
 		return nil, err
 	}

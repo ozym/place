@@ -80,7 +80,7 @@ func (e *Equipment) decode(records []dns.RR) (*Device, error) {
 		d.Name = r.Header().Name
 		switch x := r.(type) {
 		case *dns.A:
-			d.IP = x.A
+			d.IP = CopyIP(x.A)
 		case *dns.CNAME:
 		case *dns.TXT:
 			d.Place = strings.Join(x.Txt, " ")
@@ -139,7 +139,7 @@ func (e *Equipment) List() ([]Device, error) {
 	for _, r := range rr {
 		switch x := r.(type) {
 		case *dns.A:
-			devices[r.Header().Name] = Device{Name: r.Header().Name, IP: x.A}
+			devices[r.Header().Name] = Device{Name: r.Header().Name, IP: CopyIP(x.A)}
 		}
 	}
 
