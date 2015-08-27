@@ -86,48 +86,48 @@ func (d *Devices) FindByIP(ip net.IP) *Device {
 	return nil
 }
 
-func (d *Devices) ListByModel(model string) []*Device {
-	var l []*Device
+func (d *Devices) ListByModel(model string) *Devices {
+	l := Devices{}
 
 	for _, s := range d.List {
 		if !s.HasModel(model) {
 			continue
 		}
-		l = append(l, s)
+		l.List = append(l.List, s)
 	}
 
-	return l
+	return &l
 }
 
-func (d *Devices) ListByCode(code string) []*Device {
-	var l []*Device
+func (d *Devices) ListByCode(code string) *Devices {
+	l := Devices{}
 
 	for _, s := range d.List {
 		if !s.HasCode(code) {
 			continue
 		}
-		l = append(l, s)
+		l.List = append(l.List, s)
 	}
 
-	return l
+	return &l
 }
 
-func (d *Devices) ListByPlace(place string) []*Device {
-	var l []*Device
+func (d *Devices) ListByPlace(place string) *Devices {
+	l := Devices{}
 
 	for _, s := range d.List {
 		if !s.AtPlace(place) {
 			continue
 		}
-		l = append(l, s)
+		l.List = append(l.List, s)
 	}
 
-	return l
+	return &l
 }
 
-func (d *Devices) ListByModelAndCode(model, code string) []*Device {
+func (d *Devices) ListByModelAndCode(model, code string) *Devices {
 
-	var l []*Device
+	l := Devices{}
 
 	for _, s := range d.List {
 		if !s.HasModel(model) {
@@ -136,27 +136,27 @@ func (d *Devices) ListByModelAndCode(model, code string) []*Device {
 		if !s.HasCode(code) {
 			continue
 		}
-		l = append(l, s)
+		l.List = append(l.List, s)
 	}
 
-	return l
+	return &l
 }
 
-func (d *Devices) ListByNetwork(network net.IPNet) []*Device {
-	var l []*Device
+func (d *Devices) ListByNetwork(network net.IPNet) *Devices {
+	l := Devices{}
 
 	for _, s := range d.List {
 		if !s.InNetwork(network) {
 			continue
 		}
-		l = append(l, s)
+		l.List = append(l.List, s)
 	}
 
-	return l
+	return &l
 }
 
-func (d *Devices) MatchByName(name string) ([]*Device, error) {
-	var l []*Device
+func (d *Devices) MatchByName(name string) (*Devices, error) {
+	l := Devices{}
 
 	re, err := regexp.Compile(name)
 	if err != nil {
@@ -167,14 +167,28 @@ func (d *Devices) MatchByName(name string) ([]*Device, error) {
 		if !re.MatchString(s.Name) {
 			continue
 		}
-		l = append(l, s)
+		l.List = append(l.List, s)
 	}
 
-	return l, nil
+	return &l, nil
 }
 
-func (d *Devices) MatchByModel(model string) ([]*Device, error) {
-	var l []*Device
+func (d *Devices) MustMatchByName(name string) *Devices {
+	l := Devices{}
+
+	re := regexp.MustCompile(name)
+	for _, s := range d.List {
+		if !re.MatchString(s.Name) {
+			continue
+		}
+		l.List = append(l.List, s)
+	}
+
+	return &l
+}
+
+func (d *Devices) MatchByModel(model string) (*Devices, error) {
+	l := Devices{}
 
 	re, err := regexp.Compile(model)
 	if err != nil {
@@ -185,14 +199,28 @@ func (d *Devices) MatchByModel(model string) ([]*Device, error) {
 		if !re.MatchString(s.Model) {
 			continue
 		}
-		l = append(l, s)
+		l.List = append(l.List, s)
 	}
 
-	return l, nil
+	return &l, nil
 }
 
-func (d *Devices) MatchByPlace(place string) ([]*Device, error) {
-	var l []*Device
+func (d *Devices) MustMatchByModel(model string) *Devices {
+	l := Devices{}
+
+	re := regexp.MustCompile(model)
+	for _, s := range d.List {
+		if !re.MatchString(s.Model) {
+			continue
+		}
+		l.List = append(l.List, s)
+	}
+
+	return &l
+}
+
+func (d *Devices) MatchByPlace(place string) (*Devices, error) {
+	l := Devices{}
 
 	re, err := regexp.Compile(place)
 	if err != nil {
@@ -203,8 +231,22 @@ func (d *Devices) MatchByPlace(place string) ([]*Device, error) {
 		if !re.MatchString(s.Place) {
 			continue
 		}
-		l = append(l, s)
+		l.List = append(l.List, s)
 	}
 
-	return l, nil
+	return &l, nil
+}
+
+func (d *Devices) MustMatchByPlace(place string) *Devices {
+	l := Devices{}
+
+	re := regexp.MustCompile(place)
+	for _, s := range d.List {
+		if !re.MatchString(s.Place) {
+			continue
+		}
+		l.List = append(l.List, s)
+	}
+
+	return &l
 }
