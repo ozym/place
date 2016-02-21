@@ -17,6 +17,13 @@ type Service struct {
 	Port   string
 }
 
+func NewService(server string) *Service {
+	return &Service{
+		Server: server,
+		Port:   "53",
+	}
+}
+
 func (s *Service) ServerPort() (string, error) {
 
 	port := s.Port
